@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>fall-kqtt-bridge · live demo · BroadcastChannel ↔ GS.KQTT</title>
+<meta name="description" content="Live demo · the 50-LOC bridge between Simon's fall-signal estate mesh and Thomas's GS.KQTT WebRTC pub/sub · open this in two tabs to see cross-tab flow.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@500;700;800&family=DM+Mono:wght@400;500&family=Libre+Baskerville:ital@0;1&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ox: #8b1a1a;
+    --brass: #b8974a;
+    --gold: #d4a853;
+    --cream: #c4bfb2;
+    --void: #0b0a0f;
+    --surface: #14131a;
+    --border: #2a2730;
+    --muted: #6f6b78;
+    --green: #4a8a4a;
+    --amber: #c87e3a;
+    --estate: #d4a853;
+    --game:   #4a8a4a;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--void); color: var(--cream); font-family: 'DM Sans', system-ui, sans-serif; min-height: 100vh; }
+  body { background-image: radial-gradient(at 15% 0%, rgba(139,26,26,0.08) 0%, transparent 40%), radial-gradient(at 85% 100%, rgba(184,151,74,0.06) 0%, transparent 35%); }
+  header { padding: 22px 28px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+  header h1 { font-family: 'Libre Baskerville', serif; font-size: 20px; margin: 0; letter-spacing: 0.01em; }
+  header h1 em { color: var(--gold); font-style: normal; }
+  header .meta { font-family: 'DM Mono'; font-size: 11px; color: var(--muted); letter-spacing: 0.12em; text-transform: uppercase; }
+  main { max-width: 1280px; margin: 0 auto; padding: 24px; }
+  .lede { font-family: 'Libre Baskerville', serif; font-size: 16px; line-height: 1.55; color: var(--cream); margin: 0 0 8px; }
+  .sub { font-family: 'DM Mono'; font-size: 12px; color: var(--muted); margin: 0 0 22px; letter-spacing: 0.04em; }
+  .sub a { color: var(--gold); }
+  .bridgewrap { display: grid; grid-template-columns: 1fr auto 1fr; gap: 16px; align-items: stretch; margin-bottom: 20px; }
+  @media (max-width: 880px) { .bridgewrap { grid-template-columns: 1fr; } .bridgewrap .pipe { transform: rotate(90deg); } }
+  .pane { background: var(--surface); border: 1px solid var(--border); padding: 18px; min-height: 420px; display: flex; flex-direction: column; }
+  .pane.estate { border-left: 3px solid var(--estate); }
+  .pane.game   { border-left: 3px solid var(--game); }
+  .pane h2 { font-family: 'Libre Baskerville', serif; font-size: 17px; margin: 0 0 4px; color: var(--cream); }
+  .pane .tag { font-family: 'DM Mono'; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin-bottom: 14px; }
+  .pane.estate .tag { color: var(--estate); }
+  .pane.game   .tag { color: var(--game); }
+  .pane .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+  .btn { background: transparent; border: 1px solid var(--border); color: var(--cream); padding: 8px 12px; font-family: 'Syne'; font-weight: 700; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; transition: all 0.15s; }
+  .btn:hover { border-color: var(--gold); color: var(--gold); }
+  .btn.primary.estate:hover { border-color: var(--estate); color: var(--estate); }
+  .btn.primary.game:hover   { border-color: var(--game); color: var(--game); }
+  .log { background: var(--void); border: 1px solid var(--border); padding: 10px; flex: 1; overflow: auto; font-family: 'DM Mono'; font-size: 11.5px; line-height: 1.55; max-height: 360px; }
+  .log .row { padding: 4px 0; border-bottom: 1px dashed rgba(255,255,255,0.05); display: flex; gap: 10px; }
+  .log .row:last-child { border-bottom: none; }
+  .log .row .ts { color: var(--muted); flex: 0 0 64px; }
+  .log .row .src { font-weight: 700; flex: 0 0 130px; }
+  .log .row .src.estate { color: var(--estate); }
+  .log .row .src.game   { color: var(--game); }
+  .log .row .body { color: var(--cream); flex: 1; min-width: 0; word-break: break-word; }
+  .log .empty { color: var(--muted); font-style: italic; padding: 14px 8px; }
+  .pipe { display: flex; align-items: center; justify-content: center; min-width: 96px; }
+  .pipe svg { width: 84px; height: 84px; }
+  .pipe .label { font-family: 'DM Mono'; font-size: 10px; color: var(--muted); text-align: center; letter-spacing: 0.1em; text-transform: uppercase; }
+  .pipe .wrap { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .stat { background: var(--surface); border: 1px solid var(--border); padding: 14px; }
+  .stat .k { font-family: 'DM Mono'; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+  .stat .v { font-family: 'Libre Baskerville', serif; font-size: 22px; color: var(--gold); }
+  .docs { background: var(--surface); border: 1px solid var(--border); padding: 22px; margin-bottom: 20px; }
+  .docs h2 { font-family: 'Libre Baskerville', serif; font-size: 18px; margin: 0 0 12px; color: var(--cream); }
+  .docs pre { background: var(--void); border: 1px solid var(--border); padding: 14px; color: var(--cream); font-family: 'DM Mono'; font-size: 11.5px; overflow-x: auto; line-height: 1.6; }
+  .docs pre .kw { color: var(--gold); }
+  .docs pre .str { color: var(--brass); }
+  .docs pre .cmt { color: var(--muted); font-style: italic; }
+  .docs .links { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .docs .links a { font-family: 'DM Mono'; font-size: 12px; color: var(--gold); border: 1px solid var(--border); padding: 6px 10px; text-decoration: none; }
+  .docs .links a:hover { border-color: var(--gold); }
+  footer { padding: 24px; border-top: 1px solid var(--border); font-family: 'DM Mono'; font-size: 11px; color: var(--muted); text-align: center; letter-spacing: 0.06em; }
+  footer a { color: var(--brass); }
+  .cross-tab-hint { background: rgba(212,168,83,0.06); border: 1px dashed var(--gold); padding: 10px 14px; font-family: 'DM Mono'; font-size: 11.5px; color: var(--cream); margin-bottom: 20px; }
+  .cross-tab-hint b { color: var(--gold); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>◊ <em>fall-kqtt-bridge</em> · live demo</h1>
+  <div class="meta">prime 401 · v1.0 · sovereign · MIT</div>
+</header>
+
+<main>
+  <p class="lede">The 50-LOC bridge between Simon's <code>BroadcastChannel('fall-signal')</code> estate mesh and Thomas's <code>GS.KQTT</code> WebRTC pub/sub. <strong>This page is the receipt.</strong></p>
+  <p class="sub">
+    Fire events in either panel below. Watch the bridge relay them. Open <a href="" id="thisUrl">this URL</a> in a <strong>second tab</strong> and you'll see real cross-tab broadcasts.
+    · <a href="https://github.com/sjgant80-hub/fall-kqtt-bridge">source</a>
+    · <a href="https://github.com/teslasolar/GoldenShower">teslasolar/GoldenShower</a>
+    · <a href="https://github.com/teslasolar/GoldenShower/pull/5">PR #5</a>
+  </p>
+
+  <div class="cross-tab-hint">
+    <b>◊ test it live:</b> click "fall-signal · estate event" then open this page in a new tab and click "open second tab" below. Events broadcast across tabs in real time via <code>BroadcastChannel</code>.
+  </div>
+
+  <div class="bridgewrap">
+
+    <!-- ESTATE SIDE -->
+    <section class="pane estate">
+      <h2>fall-signal mesh (estate)</h2>
+      <div class="tag">BroadcastChannel('fall-signal')</div>
+      <div class="actions">
+        <button class="btn primary estate" data-fire="konomi_minted">fire · konomi_minted</button>
+        <button class="btn primary estate" data-fire="substrate_build">fire · substrate_build</button>
+        <button class="btn primary estate" data-fire="linkedin_drop">fire · linkedin_drop</button>
+        <button class="btn" id="newTab">open second tab</button>
+      </div>
+      <div class="log" id="logEstate"><div class="empty">no events yet · click a button above</div></div>
+    </section>
+
+    <!-- PIPE -->
+    <div class="pipe">
+      <div class="wrap">
+        <svg viewBox="0 0 100 100" fill="none" stroke="currentColor" stroke-width="2" style="color: var(--gold)">
+          <path d="M 5 30 Q 50 30, 50 50 T 95 70" />
+          <path d="M 95 30 Q 50 30, 50 50 T 5 70" />
+          <circle cx="50" cy="50" r="6" fill="currentColor" />
+        </svg>
+        <div class="label">fall-kqtt-bridge</div>
+        <div class="label" style="color: var(--gold); font-weight: 700">v1.0</div>
+      </div>
+    </div>
+
+    <!-- GAME SIDE -->
+    <section class="pane game">
+      <h2>GS.KQTT (GoldenShower)</h2>
+      <div class="tag">topic: gs/&lt;code&gt;/fall/#</div>
+      <div class="actions">
+        <button class="btn primary game" data-publish="match_complete">publish · match_complete</button>
+        <button class="btn primary game" data-publish="lobby_join">publish · lobby_join</button>
+        <button class="btn primary game" data-publish="kill">publish · kill</button>
+      </div>
+      <div class="log" id="logGame"><div class="empty">no events yet · click a button above</div></div>
+    </section>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="k">code</div><div class="v" id="statCode">—</div></div>
+    <div class="stat"><div class="k">estate → game</div><div class="v" id="statE2G">0</div></div>
+    <div class="stat"><div class="k">game → estate</div><div class="v" id="statG2E">0</div></div>
+    <div class="stat"><div class="k">topic prefix</div><div class="v" id="statPrefix" style="font-family: 'DM Mono'; font-size: 14px;">—</div></div>
+  </div>
+
+  <div class="docs">
+    <h2>How to integrate in GoldenShower (one line)</h2>
+    <p style="font-family:'DM Mono';font-size:12.5px;color:var(--cream);line-height:1.65;margin:0 0 12px">In <code>docs/golden-shower/multiplayer/lobby.md</code> right after <code>network.init(code)</code>:</p>
+    <pre><span class="cmt">// ◊ optional · join the AI Native Solutions mesh</span>
+<span class="kw">if</span> (<span class="kw">typeof</span> GS.FallKQTTBridge !== <span class="str">'undefined'</span>) {
+  GS.fallBridge = GS.FallKQTTBridge.<span class="kw">attach</span>(network.kqtt, code);
+}</pre>
+    <p style="font-family:'DM Mono';font-size:11.5px;color:var(--muted);margin-top:10px">Bridge module is 50 LOC. Add a <code>&lt;script src="fall-kqtt-bridge.js"&gt;</code> tag (or paste the code block into a markdown file the markdown-runner picks up). Zero new transport, zero dependencies, opt-in toggles.</p>
+    <div class="links">
+      <a href="./fall-kqtt-bridge.js">view fall-kqtt-bridge.js</a>
+      <a href="https://github.com/sjgant80-hub/fall-kqtt-bridge/blob/main/fall-kqtt-bridge.js">on github</a>
+      <a href="https://github.com/teslasolar/GoldenShower/pull/5">PR #5 · contract Q on namespace</a>
+    </div>
+  </div>
+
+  <div class="docs">
+    <h2>What gets unlocked (zero per-tool wiring)</h2>
+    <ul style="font-family:'DM Mono';font-size:12px;line-height:1.85;color:var(--cream);padding-left:20px;margin:0">
+      <li><strong style="color:var(--gold)">konomi_mint</strong> · every match_complete auto-mints a signed cert · KCC ledger entry per match</li>
+      <li><strong style="color:var(--gold)">fall-verify</strong> · top scores get adversarially-verified for cheats (3-vote refute panel)</li>
+      <li><strong style="color:var(--gold)">fall-vetter</strong> · player handle vetted before lobby_join touches the arena</li>
+      <li><strong style="color:var(--gold)">cassie-anthropic</strong> · replay analysis · bloom-vector the match</li>
+      <li><strong style="color:var(--gold)">AIN hub</strong> · estate-wide leaderboard surfaced in the marketplace</li>
+      <li><strong style="color:var(--gold)">all 89 tools on fall-signal</strong> · now also hear arena state</li>
+    </ul>
+  </div>
+</main>
+
+<footer>
+  ◊ fall-kqtt-bridge · prime 401 · MIT · cross-builder Konomi composition · <a href="https://github.com/sjgant80-hub/fall-kqtt-bridge">source</a> · by <a href="https://www.ai-nativesolutions.com">sjgant80</a> for <a href="https://github.com/teslasolar/GoldenShower">teslasolar/GoldenShower</a>
+</footer>
+
+<!-- the bridge module -->
+<script src="./fall-kqtt-bridge.js"></script>
+
+<!-- a MINI KQTT mock (just the surface fall-kqtt-bridge needs) -->
+<script>
+class MiniKQTT {
+  constructor(){
+    this.subs = [];          // { pattern, fn }
+    this.published = [];
+    this.id = 'mock-' + Math.random().toString(36).slice(2,8);
+  }
+  publish(topic, payload){
+    this.published.push({ topic, payload, ts: Date.now() });
+    for (const s of this.subs) {
+      if (this._match(s.pattern, topic)) s.fn({ topic, payload });
+    }
+    onPublishedToKQTT(topic, payload);
+  }
+  subscribe(pattern, fn){ this.subs.push({ pattern, fn }); }
+  _match(pattern, topic){
+    if (pattern === topic) return true;
+    if (pattern.endsWith('/#')) {
+      const prefix = pattern.slice(0, -2);
+      return topic === prefix || topic.startsWith(prefix + '/');
+    }
+    return false;
+  }
+}
+
+// ─── instantiate the bridge with the mock ─────────────────────────
+const CODE = (window.location.hash || '#TEST123').slice(1).toUpperCase();
+document.getElementById('statCode').textContent = CODE;
+document.getElementById('statPrefix').textContent = 'gs/' + CODE + '/fall';
+document.getElementById('thisUrl').textContent = window.location.href;
+document.getElementById('thisUrl').href = window.location.href;
+
+const kqtt = new MiniKQTT();
+const bridge = FallKQTTBridge.attach(kqtt, CODE);
+
+// ─── helpers · render to the logs ─────────────────────────────────
+const elE = document.getElementById('logEstate');
+const elG = document.getElementById('logGame');
+function clearEmpty(el){ const e = el.querySelector('.empty'); if (e) e.remove(); }
+function fmtTs(){ return new Date().toLocaleTimeString('en-GB',{hour12:false}).slice(0,8); }
+function logRow(el, srcClass, srcText, body){
+  clearEmpty(el);
+  const row = document.createElement('div');
+  row.className = 'row';
+  row.innerHTML = '<span class="ts">' + fmtTs() + '</span><span class="src ' + srcClass + '">' + srcText + '</span><span class="body"></span>';
+  row.querySelector('.body').textContent = body;
+  el.appendChild(row);
+  el.scrollTop = el.scrollHeight;
+  document.getElementById('statE2G').textContent = bridge.stats.estate_to_game;
+  document.getElementById('statG2E').textContent = bridge.stats.game_to_estate;
+}
+
+// when the mock KQTT receives a publish, log it (game-side render)
+function onPublishedToKQTT(topic, payload){
+  logRow(elG, 'game', topic, JSON.stringify(payload).slice(0, 160));
+}
+
+// listen on fall-signal in this tab to render anything that comes back through the bridge
+const bcRender = new BroadcastChannel('fall-signal');
+bcRender.onmessage = (e) => {
+  const ev = e.data;
+  const tag = ev.source === 'goldenshower' ? 'GAME→ESTATE' : (ev.source || 'estate');
+  logRow(elE, 'estate', tag + ' · ' + (ev.kind || ev.type || 'event'), JSON.stringify(ev.payload || ev).slice(0, 160));
+};
+
+// ─── wire the buttons ─────────────────────────────────────────────
+document.querySelectorAll('[data-fire]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const kind = btn.dataset.fire;
+    const payloadByKind = {
+      konomi_minted:    { cert_id: 'cert-' + Math.random().toString(36).slice(2,12), sha256: 'abcd…' + Math.random().toString(36).slice(2,6), parents: ['cert-v20.1-seed'] },
+      substrate_build:  { build_request: 'a tool that helps UK landlords track Section 21', target_repo: 'fallsection21' },
+      linkedin_drop:    { frame: 'B5.1', body_chars: 714, status: 'posted' },
+    };
+    const bc = new BroadcastChannel('fall-signal');
+    bc.postMessage({ type: 'fall_signal', source: 'si-didy', kind, payload: payloadByKind[kind] || {}, ts: new Date().toISOString() });
+    bc.close();
+    // log it on the estate side immediately too (so user sees their click)
+    logRow(elE, 'estate', 'si-didy · ' + kind, JSON.stringify(payloadByKind[kind]).slice(0, 160));
+  });
+});
+
+document.querySelectorAll('[data-publish]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const kind = btn.dataset.publish;
+    const topic = 'gs/' + CODE + '/fall/goldenshower/' + kind;
+    const payloadByKind = {
+      match_complete:  { winner: 'jaws', kills: 17, deaths: 4, duration_s: 184 },
+      lobby_join:      { handle: 'oddjob_94', mutuals: 3 },
+      kill:            { killer: 'natalya', victim: 'xenia', weapon: 'pp7' },
+    };
+    kqtt.publish(topic, payloadByKind[kind] || {});
+  });
+});
+
+document.getElementById('newTab').addEventListener('click', () => {
+  window.open(window.location.href, '_blank');
+});
+
+// ─── tell the world the page is ready ─────────────────────────────
+console.log('[demo] ready · code=' + CODE + ' · prefix=gs/' + CODE + '/fall');
+console.log('[demo] open in a second tab and watch BroadcastChannel cross-tab flow');
+</script>
+
+</body>
+</html>
